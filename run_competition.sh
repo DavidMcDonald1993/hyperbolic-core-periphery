@@ -11,7 +11,7 @@
 
 # DATA_DIR="/rds/homes/d/dxm237/data"
 
-ARR=("--seed="{0..29}" --exp="{one_core,two_core,two_core_with_residual}" --algorithm="{BE,divisive,KM_ER,KM_config})
+ARR=("--seed="{0..29}" --exp="{one_core,two_core,two_core_with_residual}" --algorithm="{BE,divisive,km_ER,km_config})
 
 module purge; module load bluebear
 module load Python/3.6.3-iomkl-2018a
