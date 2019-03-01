@@ -3,7 +3,7 @@
 #SBATCH --job-name=generateNetworks
 #SBATCH --output=generateNetworks_%A_%a.out
 #SBATCH --error=generateNetworks_%A_%a.err
-#SBATCH --array=0-359
+#SBATCH --array=0-89
 #SBATCH --time=01:00:00
 #SBATCH --ntasks=1
 #SBATCH --mem=3G
@@ -11,7 +11,7 @@
 
 # DATA_DIR="/rds/homes/d/dxm237/data"
 
-ARR=("--seed="{0..29}" --exp="{one_core,two_core,two_core_with_residual}" --algorithm="{BE,divisive,KM_ER,KM_config})
+ARR=("--seed="{0..29}" --exp="{one_core,two_core,two_core_with_residual})
 
 module purge; module load bluebear
 module load apps/python3/3.5.2
