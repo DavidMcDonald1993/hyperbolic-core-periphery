@@ -20,7 +20,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="Run core-periphery detections algorithms")
 
 	parser.add_argument("--edgelist_dir", dest="edgelist_directory", type=str, default="edgelists/",
-		help="The directory containing edgelist files (default is 'edgeslists/').")
+		help="The directory containing edgelist files (default is 'edgelists/').")
 	parser.add_argument("--prediction_dir", dest="prediction_directory", type=str, default="predictions/",
 		help="The directory to output predictions (default is 'predictions/').")
 
