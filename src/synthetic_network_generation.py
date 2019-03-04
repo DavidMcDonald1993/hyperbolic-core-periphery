@@ -73,7 +73,7 @@ def parse_args():
 	parser = argparse.ArgumentParser(description="Run core-periphery detections algorithms")
 
 	parser.add_argument("--edgelist_dir", dest="edgelist_directory", type=str, default="edgelists/",
-		help="The directory containing edgelist files (default is 'edgeslists/').")
+		help="The directory containing edgelist files (default is 'edgelists/').")
 
 	parser.add_argument("--seed", dest="seed", type=int, default=0,
 		help="Random seed (default is 0).")
