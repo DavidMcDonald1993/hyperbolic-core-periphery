@@ -76,10 +76,10 @@ def main():
 
 	# 				for seed in range(num_seeds):
 
-			edgelist_filename = os.path.join(edgelist_dir, "synthetic", exp,
+			edgelist_filename = os.path.join(edgelist_dir, "synthetic_core_periphery", exp,
 				"theta1={:.02f}-theta2={:.02f}-seed={:02d}.edgelist".format(theta1, theta2, seed) )
 
-			directory = os.path.join(predictions_dir, "synthetic", exp, algorithm)
+			directory = os.path.join(predictions_dir, "synthetic_core_periphery", exp, algorithm)
 
 			if not os.path.exists(directory):
 				print ("Making directory: {}".format(directory))

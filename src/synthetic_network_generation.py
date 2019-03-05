@@ -143,7 +143,7 @@ def main():
 
 			# for seed in range(num_seeds):
 
-			directory = os.path.join(edgelist_directory, "synthetic", exp)
+			directory = os.path.join(edgelist_directory, "synthetic_core_periphery", exp)
 			if not os.path.exists(directory):
 				print ("Making directory: {}".format(directory))
 				os.makedirs(directory, exist_ok=True)

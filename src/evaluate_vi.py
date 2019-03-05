@@ -83,7 +83,7 @@ def main():
 
 			for seed in range(num_seeds):
 
-				true_labels_directory = os.path.join(edgelist_dir, "synthetic", exp)
+				true_labels_directory = os.path.join(edgelist_dir, "synthetic_core_periphery", exp)
 				true_labels_filename = "theta1={:.02f}-theta2={:.02f}-seed={:02d}".format(theta1, theta2, seed)
 				node_label_filename = os.path.join(true_labels_directory, true_labels_filename + ".pkl")
 
@@ -94,7 +94,7 @@ def main():
 				# print (true_labels)
 				# raise SystemError
 
-				predicted_labels_directory = os.path.join(predictions_dir, "synthetic", exp, algorithm)
+				predicted_labels_directory = os.path.join(predictions_dir, "synthetic_core_periphery", exp, algorithm)
 				predicted_label_filename = os.path.join(predicted_labels_directory,
 					"theta1={:.02f}-theta2={:.02f}-seed={:02d}.pkl".format(theta1, theta2, seed) )
 
@@ -110,7 +110,7 @@ def main():
 
 	# print (results.shape)
 	results_directory = args.results_directory
-	results_directory = os.path.join(results_directory, "synthetic", exp, algorithm)
+	results_directory = os.path.join(results_directory, "synthetic_core_periphery", exp, algorithm)
 	if not os.path.exists(results_directory):
 		os.makedirs(results_directory, exist_ok=True)
 		print ("Making: {}".format(results_directory))
