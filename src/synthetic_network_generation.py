@@ -53,16 +53,18 @@ def build_stochastic_block_model(num_nodes, core_periphery_probs, connection_pro
 	
 	probs = [connection_probs[2*nodes[n1][0] + 1-nodes[n1][1], 
 							2*nodes[n2][0] + 1-nodes[n2][1]] for (n1, n2) in node_pairs]
+
+	adj = np.zeros((num_nodes, num_nodes))
+	adj[tuple(zip(*node_pairs))] = np.random.rand(len(probs)) < probs
+	# adj_flat = np.random.rand(len(probs)) < probs
 	
-	adj_flat = np.random.rand(len(probs)) < probs
-	
-	if directed and self_loops:
-		adj = adj_flat.reshape(num_nodes, num_nodes)
-	else:
-		adj = np.zeros((num_nodes, num_nodes))
-		idx = np.triu_indices(num_nodes, k=1-self_loops)
-		adj[idx] = adj_flat
-		adj[idx[::-1]] = adj_flat
+	# if directed and self_loops:
+	# 	adj = adj_flat.reshape(num_nodes, num_nodes)
+	# else:
+	# 	adj = np.zeros((num_nodes, num_nodes))
+	# 	idx = np.triu_indices(num_nodes, k=1-self_loops)
+	# 	adj[idx] = adj_flat
+	# 	adj[idx[::-1]] = adj_flat
  
 	return nodes, adj
 
