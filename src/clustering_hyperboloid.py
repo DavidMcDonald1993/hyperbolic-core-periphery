@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.cluster import DBSCAN
 
+from utils import load_data
 from visualise import draw_graph
 
 
@@ -29,12 +30,6 @@ def hyperbolic_distance(u, v):
 	mink_dp = minkowki_dot(u, v)
 	mink_dp = np.minimum(mink_dp, -(1 + 1e-32))
 	return np.arccosh(-mink_dp)
-
-def load_embedding(filename):
-	assert filename.endswith(".csv")
-	embedding_df = pd.read_csv(filename, index_col=0)
-	return embedding_df
-
 
 def perform_clustering(dists, eps):
 	dbsc = DBSCAN(metric="precomputed", eps=eps, n_jobs=-1, min_samples=3)
@@ -187,48 +182,7 @@ def plot_disk_embeddings(edges, poincare_embedding, modules,):
 	# plt.savefig(path)
 	plt.close()
 
-def load_data(args):
 
-	edgelist_filename = args.edgelist
-	features_filename = args.features
-	labels_filename = args.labels
-
-	assert not edgelist_filename == "none", "you must specify and edgelist file"
-
-	graph = nx.read_edgelist(edgelist_filename, delimiter="\t", nodetype=int,
-		create_using=nx.DiGraph() if args.directed else nx.Graph())
-
-	if not features_filename == "none":
-
-		if features_filename.endswith(".csv"):
-			features = pd.read_csv(features_filename, index_col=0, sep=",")
-			features = features.reindex(graph.nodes()).values
-			features = StandardScaler().fit_transform(features)
-		else:
-			raise Exception
-
-	else: 
-		features = None
-
-	if not labels_filename == "none":
-
-		if labels_filename.endswith(".csv"):
-			labels = pd.read_csv(labels_filename, index_col=0, sep=",")
-			labels = labels.reindex(graph.nodes()).values.flatten()
-			assert len(labels.shape) == 1
-		else:
-			raise Exception
-
-	else:
-		labels = None
-
-	embedding_filename = args.embedding_filename
-	embedding_df = load_embedding(embedding_filename)
-	embedding = embedding_df.reindex(graph.nodes()).values
-
-	graph = nx.convert_node_labels_to_integers(graph, label_attribute="original_name")
-
-	return graph, features, labels, embedding
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Density-based clustering in hyperbolic space")
@@ -245,7 +199,7 @@ def parse_args():
 	parser.add_argument('--directed', action="store_true", help='flag to train on directed graph')
 
 
-	parser.add_argument("-e", dest="max_eps", type=float, default=1,
+	parser.add_argument("-e", dest="max_eps", type=float, default=1.,
 		help="maximum eps.")
 
 	parser.add_argument("--seed", dest="seed", type=int, default=0,
@@ -255,27 +209,34 @@ def parse_args():
 	return args
 
 def main():
+
+	# 0: core
+	# 1: in
+	# 2: out
+	colors = np.array(["r", "g", "b"])
+
 	args = parse_args()
 
 	embedding_filename = args.embedding_filename
 
 	graph, features, labels, hyperboloid_embedding = load_data(args)
+	labels = labels.astype(np.int)
 
 	poincare_embedding = hyperboloid_to_poincare_ball(hyperboloid_embedding)
 	ranks = np.sqrt(np.sum(np.square(poincare_embedding), axis=-1, keepdims=False))
-	assert (ranks<1).all()
+	assert (ranks < 1).all()
 	assert (ranks.argsort() == hyperboloid_embedding[:,-1].argsort()).all()
 
 	dists = hyperbolic_distance(hyperboloid_embedding, hyperboloid_embedding)
 
-	plt.imshow(dists)
-	plt.show()
-	raise SystemExit
+	# plt.imshow(dists)
+	# plt.show()
+	# raise SystemExit
 
 	best_eps = -1
 	best_f1 = 0
 	heatmap = np.zeros((len(graph), len(graph)), )
-	for eps in np.arange(0.1, args.max_eps, 0.1):
+	for eps in np.arange(0.01, args.max_eps, 0.01):
 		modules = perform_clustering(dists, eps)
 		num_modules = len(set(modules) - {-1})
 		print ("discovered {} modules with eps = {}".format(num_modules, eps))
@@ -289,11 +250,20 @@ def main():
 			idx = np.where(modules == m)[0]
 			for u in idx:
 				for v in idx:
-					heatmap[u,v] += 1
+					heatmap[u, v] += 1
 			module = graph.subgraph(idx)
+			# assert nx.is_connected(module.to_undirected())
+			# if len(module) < 5 and nx.is_connected(module.to_undirected()):
+			if nx.is_connected(module.to_undirected()) and (labels[idx] == 2).all():
+				pos = nx.spring_layout(module)
+				# pos = poincare_embedding
+				nx.draw_networkx_nodes(module, pos=pos, node_color=colors[labels[idx].astype(np.int)])
+				nx.draw_networkx_edges(module, pos=pos)
+				nx.draw_networkx_labels(module, pos=pos)
+				plt.show()
 			print ("module =", m, "number of nodes =", len(module), 
 				"number of edges =", len(module.edges()))
-			num_connected += nx.is_connected(module)
+			num_connected += nx.is_connected(module.to_undirected())
 			# directed_modules += convert_module_to_directed_module(module, ranks)
 
 		print ("number of connected modules: {}".format(num_connected))
@@ -303,7 +273,7 @@ def main():
 
 	plt.imshow(heatmap)
 	
-	draw_graph(graph.edges(), poincare_embedding, labels=perform_clustering(dists, eps=0.5), path=None)
+	# draw_graph(graph.edges(), poincare_embedding, labels=perform_clustering(dists, eps=0.5), path=None)
 
 if __name__ == "__main__":
 	main()
