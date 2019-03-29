@@ -31,6 +31,8 @@ def build_motif_adj(g, found_motifs):
 
 		for u in found_motif:
 			for v in found_motif:
+				if u == v:
+					continue
 				motif_adj[u, v] += 1
 	return motif_adj
 
@@ -90,9 +92,11 @@ def main():
 	print ("number of nodes: {}, number of edges: {}".format(len(graph), len(graph.edges())))
 
 
-	motif = nx.DiGraph([(0, 1), (1, 2), (2, 0),])
+	motif = nx.DiGraph([(0, 2), (1, 2), ])
 
 	found_motifs = enumerate_motif_occurences(graph, motif)
+
+	print ("Found {} instances of motif".format(len(list(found_motifs))))
 
 	motif_adj = build_motif_adj(graph, found_motifs)
 
