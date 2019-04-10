@@ -150,7 +150,7 @@ def main():
 
 			if os.path.exists(edgelist_filename):
 				print ("{} already exists".format(edgelist_filename))
-				return
+				continue
 
 			node_labels, adj = build_bow_tie(num_nodes, 
 				core_prob, 
