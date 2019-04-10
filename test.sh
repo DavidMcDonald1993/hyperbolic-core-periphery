@@ -13,7 +13,7 @@ module load bluebear\; \
 module load apps/python3/3.5.2\;
 )
 
-cmd="echo \"hello world\""
+cmd="echo hello world"
 
-echo sbatch ${slurm_options} \"${modules} ${cmd}\"
-sbatch ${slurm_options} \"${modules} ${cmd}\"
+printf '#!/bin/bash\n%s %s\n' ${modules} ${cmd} >> f.test
+sbatch ${slurm_options} f.test
