@@ -12,18 +12,26 @@ do
 			edgelist_dir=edgelists/synthetic_bow_tie/${dir}
 			embedding_dir=embeddings/synthetic_bow_tie/${dir}
 			walks_dir=walks/synthetic_bow_tie/${dir}
-			
-			cmd=$(echo python ${heat} --edgelist ${edgelist_dir}.edgelist --features none --labels ${edgelist_dir}.csv \
-			--embedding ${embedding_dir} --walks ${walks_dir} --dim 10 -b 50 -e 25 --sigma 3 --context-size 1 --directed)
-			# echo ${cmd}
 
 			slurm_options=$(echo \
 			--job-name=performEmbeddings${parameters}\
 			--time=03:00:00 \
-			--mem=3G
+			--mem=3G \
+			--output=performEmbeddings${parameters}.out \
+			--error=performEmbeddings${parameters}.err
 			)
-			# echo ${slurm_options}
-			echo sbatch ${slurm_options} \"${cmd}\"
+
+			modules=$(echo \
+			module purge\; \
+			module load bluebear\; \
+			module load apps/python3/3.5.2\; \
+			module load apps/keras/2.0.8-python-3.5.2
+			)
+
+			cmd=$(echo python ${heat} --edgelist ${edgelist_dir}.edgelist --features none --labels ${edgelist_dir}.csv \
+			--embedding ${embedding_dir} --walks ${walks_dir} --dim 10 -b 50 -e 25 --sigma 3 --context-size 1 --directed)
+
+			sbatch ${slurm_options} <(echo -e '#!/bin/bash\n'${modules}'\n'${cmd})
 
 		done
 	done
