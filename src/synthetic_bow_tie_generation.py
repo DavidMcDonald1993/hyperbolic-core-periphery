@@ -157,7 +157,7 @@ def main():
 				connection_probs,
 				seed=seed)
 			graph = nx.from_numpy_matrix(adj, create_using=nx.DiGraph())
-			graph.remove_edges_from(nx.selfloop_edges(graph))
+			graph.remove_edges_from(graph.selfloop_edges())
 			# change direction to point "in" or "out"
 			for u, v in list(graph.edges()):
 			    if node_labels[u] == node_labels[v]:
