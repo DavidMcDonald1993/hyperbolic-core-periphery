@@ -148,9 +148,9 @@ def main():
 										 [theta1, theta2, 0],
 										 [0,      0,      theta2]])
 
-			# if os.path.exists(edgelist_filename):
-			# 	print ("{} already exists".format(edgelist_filename))
-			# 	return
+			if os.path.exists(edgelist_filename):
+				print ("{} already exists".format(edgelist_filename))
+				return
 
 			node_labels, adj = build_bow_tie(num_nodes, 
 				core_prob, 

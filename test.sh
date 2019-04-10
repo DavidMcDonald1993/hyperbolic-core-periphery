@@ -8,11 +8,12 @@ slurm_options=$(echo \
 )
 
 modules=$(echo \
-module purge \
-module load bluebear \
-module load apps/python3/3.5.2
+module purge\; \
+module load bluebear\; \
+module load apps/python3/3.5.2\;
 )
 
-cmd="echo hello world"
+cmd="echo \"hello world\""
 
-echo sbatch ${slurm_options} ${modules} ${cmd}
+echo sbatch ${slurm_options} \"${modules} ${cmd}\"
+sbatch ${slurm_options} \"${modules} ${cmd}\"

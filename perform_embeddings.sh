@@ -1,6 +1,6 @@
 #!/bin/bash
 
-heat=heat
+heat=/rds/projects/2018/hesz01/heat/heat/heat_embedding.py
 
 for theta1 in {10..95..5}
 do
@@ -13,7 +13,7 @@ do
 			embedding_dir=embeddings/synthetic_bow_tie/${dir}
 			walks_dir=walks/synthetic_bow_tie/${dir}
 			
-			cmd=$(echo ${heat} --edgelist ${edgelist_dir}.edgelist --features none --labels ${edgelist_dir}.csv \
+			cmd=$(echo python ${heat} --edgelist ${edgelist_dir}.edgelist --features none --labels ${edgelist_dir}.csv \
 			--embedding ${embedding_dir} --walks ${walks_dir} --dim 10 -b 50 -e 25 --sigma 3 --context-size 1 --directed)
 			# echo ${cmd}
 
