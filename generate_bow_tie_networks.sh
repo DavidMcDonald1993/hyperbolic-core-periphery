@@ -9,7 +9,7 @@
 #SBATCH --mem=3G
 # SBATCH --mail-type ALL
 
-ARR=("--seed="{0..29}})
+ARR=("--seed="{0..29})
 
 module purge; module load bluebear
 module load apps/python3/3.5.2
