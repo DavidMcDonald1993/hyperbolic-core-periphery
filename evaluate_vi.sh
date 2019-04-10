@@ -14,11 +14,8 @@
 ARR=("--exp="{one_core,two_core,two_core_with_residual}" --algorithm="{BE,divisive,km_ER,km_config})
 
 module purge; module load bluebear
-# module load Python/3.6.3-iomkl-2018a
 module load apps/python3/3.5.2
 module load apps/scikit-learn/0.19.0-python-3.5.2
-
-# pip install --user cpalgorithm
 
 echo "starting "${ARR[${SLURM_ARRAY_TASK_ID}]}
 python src/evaluate_vi.py ${ARR[${SLURM_ARRAY_TASK_ID}]}

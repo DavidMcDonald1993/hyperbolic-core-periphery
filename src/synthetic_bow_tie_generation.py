@@ -6,8 +6,6 @@ import numpy as np
 import networkx as nx
 import pandas as pd
 
-# import cpalgorithm as cp
-# import json
 import os
 import pickle as pkl
 
@@ -119,9 +117,6 @@ def parse_args():
 
 	parser.add_argument("--seed", dest="seed", type=int, default=0,
 		help="Random seed (default is 0).")
-	# parser.add_argument("-m", "--num-edges", dest="num_edges", type=int, default=1,
-	# 	help="Number of new edges per new node (default is 1).")
-
 	args = parser.parse_args()
 	return args
 
@@ -136,19 +131,6 @@ def main():
 
 	seed = args.seed
 	core_prob = 1./6
-	# # num_edges = args.num_edges
-
-	# node_labels, graph = build_bow_tie_2(num_nodes, num_edges=3, kernel=lambda x : x, seed=seed, )
-
-	# graph.remove_edges_from(nx.selfloop_edges(graph))
-
-	# print (len(graph), len(graph.edges()))
-
-	# nx.set_edge_attributes(graph, values=1, name="weight")
-	# nx.write_edgelist(graph, "test.edgelist", delimiter="\t")
-	# node_labels.to_csv("test.csv", sep=",")
-
-	# return
 
 	directory = os.path.join(edgelist_directory, "synthetic_bow_tie")
 	if not os.path.exists(directory):
@@ -170,10 +152,6 @@ def main():
 			# 	print ("{} already exists".format(edgelist_filename))
 			# 	return
 
-			# node_labels, graph = build_bow_tie(num_nodes, 
-			# 	num_edges=num_edges, 
-			# 	kernel=lambda x : x,
-			# 	seed=seed)
 			node_labels, adj = build_bow_tie(num_nodes, 
 				core_prob, 
 				connection_probs,
@@ -183,18 +161,16 @@ def main():
 			# change direction to point "in" or "out"
 			for u, v in list(graph.edges()):
 			    if node_labels[u] == node_labels[v]:
-			        if node_labels[u] == 1:
+			        if node_labels[u] == 1: # in component
 			            if graph.degree(u) > graph.degree(v):
 			                graph.remove_edge(u, v)
 			                graph.add_edge(v, u)
-			        elif node_labels[u] == 2:
+			        elif node_labels[u] == 2: # out component
 			            if graph.degree(v) > graph.degree(u):
 			                graph.remove_edge(u, v)
 			                graph.add_edge(v, u)
 			nx.set_edge_attributes(graph, values=1, name="weight")
 			nx.write_edgelist(graph, edgelist_filename, delimiter="\t")
-			# with open(node_label_filename, "wb") as f:
-			# 	pkl.dump(node_labels, f, pkl.HIGHEST_PROTOCOL)
 			node_labels =  pd.DataFrame.from_dict(node_labels, orient="index")
 			node_labels.to_csv(node_label_filename, sep=",")
 
@@ -217,17 +193,6 @@ def main():
 			print ("Core density = {}".format(nx.density(core)))
 			print ("Periphery in density = {}".format(nx.density(periphery_in)))
 			print ("Periphery out density = {}".format(nx.density(periphery_out)))
-
-			# plt.figure(figsize=[10,10])
-			# pos = graphviz_layout(graph)
-
-			# nx.draw_networkx_nodes(core, pos=pos, node_color="r")
-			# nx.draw_networkx_nodes(periphery_in, pos=pos, node_color="b")
-			# nx.draw_networkx_nodes(periphery_out, pos=pos, node_color="g")
-
-			# nx.draw_networkx_edges(graph, pos=pos)
-			# nx.draw_networkx_labels(graph, pos=pos)
-			# plt.show()
 
 if __name__ == "__main__":
 	main()

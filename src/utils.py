@@ -3,6 +3,23 @@ import pandas as pd
 import networkx as nx
 from sklearn.preprocessing import StandardScaler
 
+def minkowki_dot(u, v):
+	"""
+	`u` and `v` are vectors in Minkowski space.
+	"""
+	rank = u.shape[-1] - 1
+	euc_dp = u[:,:rank].dot(v[:,:rank].T)
+	return euc_dp - u[:,rank, None] * v[:,rank]
+
+def hyperbolic_distance(u, v):
+	mink_dp = minkowki_dot(u, v)
+	mink_dp = -1 - mink_dp
+	mink_dp = np.maximum(mink_dp, 1e-15)
+	return np.arccosh(1 + mink_dp)
+
+def hyperboloid_to_poincare_ball(X):
+	return X[:,:-1] / (1 + X[:,-1,None])
+
 def load_embedding(filename):
 	assert filename.endswith(".csv")
 	embedding_df = pd.read_csv(filename, index_col=0)
