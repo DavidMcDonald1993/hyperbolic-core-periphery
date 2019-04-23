@@ -11,7 +11,7 @@ embedding_dir=embeddings/grn/
 walks_dir=walks/grn/
 
 slurm_options=$(echo \
---job-name=performEmbeddingsGRN\
+--job-name=performEmbeddingsGRN \
 --time=${hrs}:00:00 \
 --mem=${mem} \
 --output=performEmbeddingsGRN.out \
