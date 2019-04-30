@@ -12,7 +12,7 @@ walks_dir=walks/grn/
 
 for dim in 05 10 25 50 100
 do
-	for seed in 00..29
+	for seed in {00..29}
 	do
 
 		slurm_options=$(echo \
