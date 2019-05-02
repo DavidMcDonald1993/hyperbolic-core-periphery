@@ -1,4 +1,6 @@
+import os
 import numpy as np
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import itertools
@@ -15,6 +17,9 @@ from sklearn.cluster import KMeans, AgglomerativeClustering
 
 from utils import load_data, hyperboloid_to_poincare_ball, hyperbolic_distance
 from visualise import draw_graph
+from clustering_hyperboloid import compute_centroid
+
+CUTOFF = 0.05
 
 motifs = {
 	"m1": nx.DiGraph( ((0, 1), (1, 2), (2, 0)) ),
@@ -84,7 +89,7 @@ def enumerate_paths(graph, n):
 	paths = [tuple(sorted(path)) for nodes in paths for path in nodes ]
 	paths = list(set(paths))
 	print ("enumerated all {}-node paths in graph".format(n))
-	print ("found {} paths".format(len(paths)))
+	print ("found {} potential motifs".format(len(paths)))
 	return paths
 
 def parse_args():
@@ -94,12 +99,15 @@ def parse_args():
 		help="path of embedding to load.")
 	parser.add_argument("--edgelist", dest="edgelist", type=str,
 		help="The edgelist of the graph.")
-	parser.add_argument("--features", dest="features", type=str, default="none",
+	parser.add_argument("--features", dest="features", type=str,
 		help="features to load.")
 	parser.add_argument("--labels", dest="labels", type=str,
 		help="path to labels")
+
+	parser.add_argument("--motifs", dest="motifs", type=str,
+		help="path to save found motifs")
 	
-	parser.add_argument('--directed', action="store_true", help='flag to train on directed graph')
+	parser.add_argument('--directed', action="store_true", help='flag for directed graph')
 
 	parser.add_argument("--seed", dest="seed", type=int, default=0,
 		help="Random seed (default is 0).")
@@ -120,16 +128,21 @@ def main():
 	graph, features, labels, hyperboloid_embedding = load_data(args)
 	print ("Loaded graph:\nnumber of nodes: {}, number of edges: {}\n".format(len(graph), len(graph.edges())))
 
+	if not os.path.exists(args.motifs):
+		os.makedirs(args.motifs, exist_ok=True)
+	motif_statistics_filename= os.path.join(args.motifs, "motif_statistics.csv")
+	path_labels_filename = os.path.join(args.motifs, "path_labels.csv")
+
 	poincare_embedding = hyperboloid_to_poincare_ball(hyperboloid_embedding)
 	ranks = 2 * np.arctanh(np.linalg.norm(poincare_embedding, axis=-1))
 
-	print ("core ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==0].min(),
-		ranks[labels==0].mean(), ranks[labels==0].max()))
-	print ("periphery-in ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==1].min(),
-		ranks[labels==1].mean(), ranks[labels==1].max()))
-	print ("periphery-out ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==2].min(),
-		ranks[labels==2].mean(), ranks[labels==2].max()))
-	print ()
+	# print ("core ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==0].min(),
+	# 	ranks[labels==0].mean(), ranks[labels==0].max()))
+	# print ("periphery-in ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==1].min(),
+	# 	ranks[labels==1].mean(), ranks[labels==1].max()))
+	# print ("periphery-out ranks:\nmin={}\nmean={}\nmax={}\n".format(ranks[labels==2].min(),
+	# 	ranks[labels==2].mean(), ranks[labels==2].max()))
+	# print ()
 
 	motif_size = 3
 
@@ -137,27 +150,27 @@ def main():
 		assert len(motif) == motif_size
 
 	path_labels = enumerate_motif_occurences(graph,  )
-	found_motifs = {name: [] for name in motifs.keys()}
-	for path, name in path_labels:
-		if name is not None:
-			found_motifs[name].append(path)
 
-	for k, v in found_motifs.items():
-		print ("Found {} instances of motif {}".format(len(v), k))
-		np.savetxt(fname="test_{}.csv".format(k), X=np.array(v), delimiter=",", fmt="%d")
+	found_motifs = {name: [] for name in motifs.keys()}
+	with open(path_labels_filename, "w") as f:
+		for path, name in path_labels:
+			if name is not None:
+				found_motifs[name].append(path)
+				f.write("{}\t{}\t{}\t{}\n".format(*path, name))
 
 	print ()
-	print ("Testing statistical significances of motifs")
+	print ("Testing statistical significances of motifs\n")
 
 	n = len(graph)
 	p = len(graph.edges()) / n ** 2
+	if not args.directed:
+		p = 2 * p
 	num_erdos_renyi_graphs = args.num_erdos_renyi_graphs
 	print ("Generating {} ER graphs with n={} and p={}".format(num_erdos_renyi_graphs, n, p))
 	erdos_renyi_graphs = generate_erdos_renyi(n, p, num_graphs=num_erdos_renyi_graphs)
 	erdos_renyi_num_occurences = {name: np.zeros(num_erdos_renyi_graphs) for name in motifs.keys()}
 	for i, erdos_renyi_graph in enumerate(erdos_renyi_graphs):
 		print ("number of nodes: {}, number of edges: {}".format(len(erdos_renyi_graph), len(erdos_renyi_graph.edges())))
-		# erdos_renyi_paths = enumerate_paths(erdos_renyi_graph, motif_size)
 		erdos_renyi_path_labels = enumerate_motif_occurences(erdos_renyi_graph,  )
 		for _, name in erdos_renyi_path_labels:
 			if name is not None:
@@ -182,24 +195,61 @@ def main():
 		p_values[name] = p_value
 
 	print ()
-	print ("Enumerating motifs in order of significance")
+	print ("Enumerating motifs in order of significance\n")
+
+	motif_statistics_df = pd.DataFrame(columns=["p-value", 
+		# "num_occurences_core", "num_occurences_periphery_in", "num_occurences_periphery_out",
+		"min_rank", "mean_rank", "max_rank"])
 	node_counts = {name: np.zeros(n, dtype=np.int) for name in motifs}
-	# motif_mean_ranks = {name: np.inf for name in motifs}
 	for name in sorted(p_values, key=p_values.get):
-		if p_values[name] > 0.05:
+		if p_values[name] > CUTOFF:
 			continue
-		print ("motif: {}\np-value: {}\n".format(name, p_values[name]))
+		p_value = p_values[name]
+		print ("motif: {}\np-value: {}\n".format(name, p_value))
 		for path in found_motifs[name]:
 			node_counts[name][list(path)] += 1
 
 		counts = node_counts[name]
-		print ("num occurences: {}".format(counts.sum() / 3))
-		print ("num occurences in core: {}".format(counts[labels==0].sum() / 3))
-		print ("num occurences in periphery-in: {}".format(counts[labels==1].sum() / 3))
-		print ("num occurences in periphery-out: {}".format(counts[labels==2].sum() / 3))
+		
+		# num_occurences_core = counts[labels==0].sum() / 3
+		# num_occurences_periphery_in = counts[labels==1].sum() / 3
+		# num_occurences_periphery_out = counts[labels==2].sum() / 3
 
-		motif_ranks = ranks[np.array(found_motifs[name]).flatten()]
-		print ("min rank: {}\nmean rank: {}\nmax rank: {}\n".format(motif_ranks.min(), motif_ranks.mean(), motif_ranks.max()))
+		print ("num occurences: {}".format(counts.sum() / 3))
+		# print ("num occurences in core: {}".format(num_occurences_core))
+		# print ("num occurences in periphery-in: {}".format(num_occurences_periphery_in))
+		# print ("num occurences in periphery-out: {}".format(num_occurences_periphery_out))
+
+		# motif_ranks = ranks[np.array(found_motifs[name]).flatten()]
+		# print ("min rank: {}\nmean rank: {}\nmax rank: {}\n".format(motif_ranks.min(), motif_ranks.mean(), motif_ranks.max()))
+		centroids = np.concatenate([compute_centroid(hyperboloid_embedding[list(idx)]) 
+			for idx in found_motifs[name]])
+		print ("computed centroids of all instances of {}".format(name))
+
+		centroid_ranks = 2 * np.arctanh(np.linalg.norm(hyperboloid_to_poincare_ball(centroids), axis=-1))
+
+		motif_statistics_df.loc[name] = {
+			"p-value": p_value, 
+			# "num_occurences_core": num_occurences_core,
+			# "num_occurences_periphery_in": num_occurences_periphery_in,
+			# "num_occurences_periphery_out": num_occurences_periphery_out,
+			"min_rank": centroid_ranks.min(),
+			"mean_rank": centroid_ranks.mean(),
+			"max_rank": centroid_ranks.max()
+		}
+
+		# build motif adjacency matrix for all statistically significant motifs
+		print ("building motif adjacency matrix for motif {}".format(name))
+		motif_adj = build_motif_adj(graph, found_motifs[name])
+
+		motif_graph = nx.from_numpy_matrix(motif_adj)
+		motif_graph.add_edges_from(((u, u, {"weight": 0.}) for u in graph.nodes() ))
+		nx.write_edgelist(motif_graph, 
+			os.path.join("edgelists", "ecoli", "{}_motif_graph.tsv".format(name)), 
+			delimiter="\t", data=["weight"])
+
+	print("writing statistics to {}".format(motif_statistics_filename))
+	motif_statistics_df.to_csv(motif_statistics_filename, sep=",")
 
 if __name__ == "__main__":
 	main()

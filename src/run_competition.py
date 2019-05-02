@@ -92,7 +92,7 @@ def main():
 				print("{} already exists, continuing".format(label_filename))
 				continue
 
-			g = nx.read_edgelist(edgelist_filename, delimiter="\t", nodetype=str)
+			g = nx.read_weighted_edgelist(edgelist_filename, delimiter="\t", nodetype=str)
 
 			# with open("edgelists/synthetic/one_core/theta1=0.10-theta2=0.05-seed=00.pkl", "rb") as f:
 			# 	node_labels = pkl.load(f)

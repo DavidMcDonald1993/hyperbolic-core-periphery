@@ -3,6 +3,8 @@ import pandas as pd
 import networkx as nx
 from sklearn.preprocessing import StandardScaler
 
+import pickle as pkl
+
 def minkowki_dot(u, v):
 	"""
 	`u` and `v` are vectors in Minkowski space.
@@ -20,11 +22,10 @@ def hyperbolic_distance(u, v):
 def hyperboloid_to_poincare_ball(X):
 	return X[:,:-1] / (1 + X[:,-1,None])
 
-def load_embedding(filename):
-	assert filename.endswith(".csv")
-	embedding_df = pd.read_csv(filename, index_col=0)
+def load_embedding(embedding_filename):
+	assert embedding_filename.endswith(".csv")
+	embedding_df = pd.read_csv(embedding_filename, index_col=0)
 	return embedding_df
-
 
 def load_data(args):
 
@@ -32,12 +33,14 @@ def load_data(args):
 	features_filename = args.features
 	labels_filename = args.labels
 
-	assert not edgelist_filename == "none", "you must specify and edgelist file"
+	assert edgelist_filename is not None, "you must specify and edgelist file"
 
-	graph = nx.read_edgelist(edgelist_filename, delimiter="\t", nodetype=int,
+	graph = nx.read_weighted_edgelist(edgelist_filename, delimiter="\t", nodetype=int,
 		create_using=nx.DiGraph() if args.directed else nx.Graph())
 
-	if not features_filename == "none":
+	graph.remove_edges_from(nx.selfloop_edges(graph))
+
+	if features_filename is not None:
 
 		if features_filename.endswith(".csv"):
 			features = pd.read_csv(features_filename, index_col=0, sep=",")
@@ -49,12 +52,18 @@ def load_data(args):
 	else: 
 		features = None
 
-	if not labels_filename == "none":
+	if labels_filename is not None:
 
 		if labels_filename.endswith(".csv"):
 			labels = pd.read_csv(labels_filename, index_col=0, sep=",")
-			labels = labels.reindex(graph.nodes()).values.flatten()
+			labels = labels.reindex(sorted(graph.nodes())).values.flatten()
 			assert len(labels.shape) == 1
+		elif labels_filename.endswith(".pkl"):
+			with open(labels_filename, "rb") as f:
+				labels = pkl.load(f)
+			# label_map = {label: i for i, label in enumerate(set(labels.values()))}
+			# labels = np.array([label_map[labels[n]] for n in graph.nodes()])
+			labels = np.array([labels[n] for n in sorted(graph.nodes())], dtype=np.int)
 		else:
 			raise Exception
 
@@ -63,8 +72,8 @@ def load_data(args):
 
 	embedding_filename = args.embedding_filename
 	embedding_df = load_embedding(embedding_filename)
-	embedding = embedding_df.reindex(graph.nodes()).values
+	embedding = embedding_df.reindex(sorted(graph.nodes())).values
 
-	graph = nx.convert_node_labels_to_integers(graph, label_attribute="original_name")
+	# graph = nx.convert_node_labels_to_integers(graph, label_attribute="original_name")
 
 	return graph, features, labels, embedding

@@ -12,11 +12,12 @@ from networkx.drawing.nx_agraph import graphviz_layout
 import matplotlib.pyplot as plt
 
 
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import DBSCAN, KMeans
+from sklearn.metrics import roc_auc_score
+
 
 from utils import load_data
 from visualise import draw_graph
-
 
 def minkowki_dot(u, v):
 	"""
@@ -32,9 +33,10 @@ def hyperbolic_distance(u, v):
 	return np.arccosh(-mink_dp)
 
 def perform_clustering(dists, eps):
-	dbsc = DBSCAN(metric="precomputed", eps=eps, n_jobs=-1, min_samples=3)
-	labels = dbsc.fit_predict(dists)
-	return labels
+	dbsc = DBSCAN(metric="precomputed", eps=eps, 
+		n_jobs=-1, 
+		min_samples=3).fit(dists)
+	return dbsc.labels_, dbsc.core_sample_indices_
 
 def hyperboloid_to_poincare_ball(X):
 	return X[:,:-1] / (1 + X[:,-1,None])
@@ -59,130 +61,66 @@ def convert_module_to_directed_module(module, ranks):
 
 	return directed_modules
 
-def grow_forest(data_train, directed_modules, ranks, feature_names, bootstrap=True, ):
+def compute_centroid(embedding,):
+	centroid = embedding.sum(axis=0, keepdims=True)
+	centroid = centroid / np.sqrt(centroid[:,-1:] ** 2 - np.sum(centroid[:,:-1] ** 2, axis=-1, keepdims=True))
+	return centroid
 
-	n = data_train.shape[0]
+def ensemble_clustering(co_association_matrix, threshold=0.5):
+	clusters = []
+	nodes = set(range(len(co_association_matrix)))
+	added_node = False
 
+	# remove nodes with rows all < threshold
+	noise_nodes, = np.where((co_association_matrix < threshold).all(axis=1))
 
-	forest = []
-	all_oob_samples = []
+	nodes -= set(noise_nodes)
 
-	for directed_module in directed_modules:
-		feats = directed_module.nodes()
-		root = feats[ranks[feats].argmin()]
-		assert nx.is_connected(directed_module.to_undirected())
+	while len(nodes) > 0:
+		
+		if not added_node:
+			# add new cluster
+			print ("adding new cluster")
+			clusters.append([nodes.pop()])
 
-		if bootstrap:
-			idx = np.random.choice(n, size=n, replace=True)
-			_data_train = data_train[idx]
-		else:
-			_data_train = data_train
+		added_node = False
+		for n in nodes:
+			cluster_associativity = np.array([co_association_matrix[n, cluster].max() for cluster in clusters])
+			if cluster_associativity.max() > threshold:
+				clusters[cluster_associativity.argmax()].append(n)
+				nodes = nodes - {n}
+				added_node = True
 
-		tree = TopologyConstrainedTree(parent_index=None, index=root, g=directed_module, 
-			data=_data_train, feature_names=feature_names, depth=0, max_depth=np.inf, min_samples_split=2, min_neighbours=1)
+		print (len(nodes), len(clusters))
+	assignments = {n : cluster_no if len(cluster) > 1 else -1 for cluster_no, cluster in enumerate(clusters) for n in cluster} 
+	assignments.update({n: -1 for n in noise_nodes})
+	return assignments
 
-		if bootstrap:
-			oob_samples = list(set(range(n)) - set(idx))
-			oob_samples = data_train[oob_samples]
-			all_oob_samples.append(oob_samples)
+def determine_core_periphery_split(cluster_ranks):
+	assert len(cluster_ranks.shape) == 2 and cluster_ranks.shape[1] ==1
+	kmeans = KMeans(n_clusters=2, random_state=0).fit(cluster_ranks)
+	labels = k_means.labels_
+	centres = kmeans.cluster_centers_
+	# ensure core has label 0
+	core_label = centres.argmin()
+	if core_label == 1:
+		labels = 1 - labels
+	return labels
 
-			# oob_prediction = tree.predict(oob_samples)
-			# oob_prediction_accuracy = tree.prediction_accuracy(oob_samples[:,-1], oob_prediction)
-			# print (n, set(idx), len(oob_samples), oob_prediction_accuracy)
+def assess_core_periphery_auroc(labels, ranks):
+	if len(labels.shape) == 2:
+		labels_ = labels[:,1]
+	else:
+		labels_ = labels
+	return roc_auc_score(labels_, -ranks)
 
-		forest.append(tree)
-	return forest, all_oob_samples
+def compute_dispersion(cluster_embedding):
+	assert len(cluster_embedding.shape) == 2
+	centroid = cluster_embedding.sum(axis=0, keepdims=True)
+	centroid = centroid / np.sqrt(centroid[:,-1:] ** 2  - np.sum(centroid[:,:-1] ** 2, axis=-1) )
 
-def evaluate_modules_on_test_data(features, labels, directed_modules, ranks, feature_names,
-	n_repeats=10, test_size=0.3, ):
-
-	data = np.column_stack([features, labels])
-
-	f1_micros = []
-
-	sss = StratifiedShuffleSplit(n_splits=n_repeats, test_size=test_size, random_state=0)
-	for split_train, split_test in sss.split(features, labels):
-
-		data_train = data[split_train]
-		data_test = data[split_test]
-
-		forest, _ = grow_forest(data_train, directed_modules, ranks, feature_names)
-
-		test_prediction = np.array([t.predict(data_test) for t in forest])
-		test_prediction = test_prediction.mean(axis=0) > 0.5
-		f1_micro = f1_score(data_test[:,-1], test_prediction, average="micro")
-		f1_micros.append(f1_micro)
-
-	return np.mean(f1_micros)
-
-def determine_feature_importances(forest, all_oob_samples):
-
-	n_trees = len(forest)
-	n_features = all_oob_samples[0].shape[1] - 1
-	feature_importances = np.zeros((n_trees, n_features),)
-	feature_pair_importances = np.zeros((n_trees, n_features, n_features), )
-
-	for i, tree, oob_samples in zip(range(n_trees), forest, all_oob_samples):
-		oob_sample_prediction = tree.predict(oob_samples)
-		oob_sample_accuracy = tree.prediction_accuracy(oob_samples[:,-1], oob_sample_prediction)
-
-		for feature in range(n_features):
-			_oob_samples = oob_samples.copy()
-			np.random.shuffle(_oob_samples[:,feature])
-			permuted_prediction = tree.predict(_oob_samples)
-			permuted_prediction_accuracy = tree.prediction_accuracy(_oob_samples[:,-1], permuted_prediction)
-			feature_importances[i, feature] = oob_sample_accuracy - permuted_prediction_accuracy
-
-		# for f1 in range(n_features):
-		# 	for f2 in range(n_features):
-		# 		_oob_samples = oob_samples.copy()
-		# 		np.random.shuffle(_oob_samples[:,f1])
-		# 		np.random.shuffle(_oob_samples[:,f2])
-
-		# 		permuted_prediction = tree.predict(_oob_samples)
-		# 		permuted_prediction_accuracy = tree.prediction_accuracy(_oob_samples[:,-1], permuted_prediction)
-		# 		feature_importances[i, feature] = oob_sample_accuracy - permuted_prediction_accuracy
-
-	return feature_importances.mean(axis=0), feature_pair_importances.mean(axis=0)
-
-
-def plot_disk_embeddings(edges, poincare_embedding, modules,):
-
-	if not isinstance(edges, np.ndarray):
-		edges = np.array(edges) 
-
-	all_modules = sorted(set(modules))
-	num_modules = len(all_modules)
-	colors = np.random.rand(num_modules, 3)
-
-	fig = plt.figure(figsize=[14, 7])
-	
-	ax = fig.add_subplot(111)
-	plt.title("Poincare")
-	ax.add_artist(plt.Circle([0,0], 1, fill=False))
-	u_emb = poincare_embedding[edges[:,0]]
-	v_emb = poincare_embedding[edges[:,1]]
-	plt.plot([u_emb[:,0], v_emb[:,0]], [u_emb[:,1], v_emb[:,1]], c="k", linewidth=0.05, zorder=0)
-	for i, m in enumerate(all_modules):
-		idx = modules == m
-		plt.scatter(poincare_embedding[idx,0], poincare_embedding[idx,1], s=10, 
-			c=colors[i], label="module={}".format(m) if m > -1 else "noise", zorder=1)
-	plt.xlim([-1,1])
-	plt.ylim([-1,1])
-
-	# Shrink current axis by 20%
-	box = ax.get_position()
-	ax.set_position([box.x0, box.y0, box.width * 0.5, box.height])
-
-	# Put a legend to the right of the current axis
-	ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=4)
-
-	# plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.05),ncol=3)
-	plt.show()
-	# plt.savefig(path)
-	plt.close()
-
-
+	distances = hyperbolic_distance(cluster_embedding, centroid)
+	return distances.mean()
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Density-based clustering in hyperbolic space")
@@ -191,13 +129,12 @@ def parse_args():
 		help="path of embedding to load.")
 	parser.add_argument("--edgelist", dest="edgelist", type=str,
 		help="The edgelist of the graph.")
-	parser.add_argument("--features", dest="features", type=str, default="none",
+	parser.add_argument("--features", dest="features", type=str, 
 		help="features to load.")
 	parser.add_argument("--labels", dest="labels", type=str,
 		help="path to labels")
 	
-	parser.add_argument('--directed', action="store_true", help='flag to train on directed graph')
-
+	parser.add_argument('--directed', action="store_true", help='flag for directed graph')
 
 	parser.add_argument("-e", dest="max_eps", type=float, default=1.,
 		help="maximum eps.")
@@ -211,8 +148,8 @@ def parse_args():
 def main():
 
 	# 0: core
-	# 1: in
-	# 2: out
+	# 1: periphery-in
+	# 2: periphery-out
 	colors = np.array(["r", "g", "b"])
 
 	args = parse_args()
@@ -220,24 +157,36 @@ def main():
 	embedding_filename = args.embedding_filename
 
 	graph, features, labels, hyperboloid_embedding = load_data(args)
-	labels = labels.astype(np.int)
 
 	poincare_embedding = hyperboloid_to_poincare_ball(hyperboloid_embedding)
-	ranks = np.sqrt(np.sum(np.square(poincare_embedding), axis=-1, keepdims=False))
-	assert (ranks < 1).all()
-	assert (ranks.argsort() == hyperboloid_embedding[:,-1].argsort()).all()
+	ranks = 2 * np.arctanh(np.linalg.norm(poincare_embedding, 
+		axis=-1, keepdims=False))
+
+	k_core_df = pd.read_csv("edgelists/ecoli/core_numbers.csv", sep=",", index_col=0, header=None)
+
+
+	print (np.corrcoef(ranks, [graph.degree(n) for n in sorted(graph.nodes())]))
+	print (np.corrcoef(ranks, k_core_df[1]))
+
 
 	dists = hyperbolic_distance(hyperboloid_embedding, hyperboloid_embedding)
 
-	# plt.imshow(dists)
-	# plt.show()
-	# raise SystemExit
+	cores = []
+	counts = np.zeros(len(graph))
+	co_association_matrix = np.zeros((len(graph), len(graph)))
+	max_value = np.finfo(np.float64).max
 
-	best_eps = -1
-	best_f1 = 0
-	heatmap = np.zeros((len(graph), len(graph)), )
-	for eps in np.arange(0.01, args.max_eps, 0.01):
-		modules = perform_clustering(dists, eps)
+	dists_copy = dists.copy()
+	dists_copy.sort(axis=1)
+	dists4 = dists_copy[:,4]
+	min_ = np.maximum(0.05, dists4.mean() - 2 * dists4.std())
+	max_ = dists4.mean() + 2 * dists4.std()
+
+	print (min_, max_)
+
+	for eps in np.arange(min_, max_, 0.1):
+	# for eps in np.arange(0.05, args.max_eps, 0.05):
+		modules, _ = perform_clustering(dists, eps)
 		num_modules = len(set(modules) - {-1})
 		print ("discovered {} modules with eps = {}".format(num_modules, eps))
 
@@ -245,35 +194,90 @@ def main():
 		print ("fraction of nodes in modules: {}".format(fraction_of_nodes))
 
 		num_connected = 0
-		# directed_modules = []
 		for m in range(num_modules):
 			idx = np.where(modules == m)[0]
-			for u in idx:
-				for v in idx:
-					heatmap[u, v] += 1
 			module = graph.subgraph(idx)
-			# assert nx.is_connected(module.to_undirected())
-			# if len(module) < 5 and nx.is_connected(module.to_undirected()):
-			if nx.is_connected(module.to_undirected()) and (labels[idx] == 2).all():
-				pos = nx.spring_layout(module)
-				# pos = poincare_embedding
-				nx.draw_networkx_nodes(module, pos=pos, node_color=colors[labels[idx].astype(np.int)])
-				nx.draw_networkx_edges(module, pos=pos)
-				nx.draw_networkx_labels(module, pos=pos)
-				plt.show()
-			print ("module =", m, "number of nodes =", len(module), 
-				"number of edges =", len(module.edges()))
-			num_connected += nx.is_connected(module.to_undirected())
-			# directed_modules += convert_module_to_directed_module(module, ranks)
+			print ("cluster =", m, "number of nodes =", len(module), 
+				"number of edges =", len(module.edges()), "connected =", nx.is_connected(module.to_undirected()))
+
+			is_connected = nx.is_connected(module.to_undirected())
+			num_connected += is_connected
+			
+			if is_connected:
+				for u in idx:
+					counts[u] += 1
+					for v in idx:
+						# if u != v:
+						co_association_matrix[u, v] += 1
+
+				if frozenset(idx) not in cores:
+					cores.append(frozenset(idx))
 
 		print ("number of connected modules: {}".format(num_connected))
 
 		if fraction_of_nodes == 1.:
 			break
 
-	plt.imshow(heatmap)
-	
-	# draw_graph(graph.edges(), poincare_embedding, labels=perform_clustering(dists, eps=0.5), path=None)
+	print ("number of cores: {}".format(len(cores)))
+	core_groups = {}
+	is_superset = np.zeros(len(cores))
+	for i in range(len(cores)):
+		if is_superset[i]:
+			continue
+		core = cores[i]
+		supersets = []
+		for j in range(len(cores)):
+			core_ = cores[j]
+			if core < core_:
+				is_superset[j] = 1
+				supersets.append(j)
+		core_groups.update({i: supersets})
+
+	print ("number of core groups: {}".format(len(core_groups)))
+
+	assignments = {n: -1 for n in sorted(graph.nodes())}
+	for i in core_groups.keys():
+		for n in cores[i]:
+			assignments[n] = i
+
+	co_association_matrix /= co_association_matrix.max()
+	assignments_ensemble = ensemble_clustering(co_association_matrix, threshold=0.5)
+		
+	from sklearn.metrics import normalized_mutual_info_score
+	print (normalized_mutual_info_score([assignments[n] for n in sorted(graph.nodes())],
+		[assignments_ensemble[n] for n in sorted(graph.nodes())]))
+
+	print ({c: list(assignments_ensemble.values()).count(c) for c in set(assignments_ensemble.values())})
+
+	print (np.corrcoef(counts, k_core_df[1]))
+
+	plt.scatter(counts, k_core_df[1])
+	plt.xlabel("counts")
+	plt.ylabel("kcore")
+	plt.show()
+
+	raise SystemExit
+
+	num_clusters = len(set(assignments.values()) - {-1})
+	print ("number of clusters found {}".format(num_clusters))
+
+	print (np.array([assignments[n] for n in sorted(graph.nodes())]))
+	cluster_sizes = {c: list(assignments.values()).count(c) 
+		for c in set(assignments.values())}
+	print (cluster_sizes)
+
+	core_centroids = np.concatenate([compute_centroid(hyperboloid_embedding[list(cores[i])]) for i in core_groups.keys()])
+	core_centroids_poincare = hyperboloid_to_poincare_ball(core_centroids)
+	core_ranks = 2 * np.arctanh(np.linalg.norm(core_centroids_poincare, axis=-1, keepdims=True))
+
+	print (core_ranks)
+
+	print (np.corrcoef(k_shell_numbers["Kshell number"], [counts[n] for n in k_shell_numbers["GeneName"]]))
+
+	plt.scatter(k_shell_numbers["Kshell number"], [counts[n] for n in k_shell_numbers["GeneName"]])
+	plt.xlabel("k_core_number")
+	plt.ylabel("core count")
+	plt.show()
 
 if __name__ == "__main__":
 	main()

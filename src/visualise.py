@@ -88,7 +88,7 @@ def get_angles(cent, a):
     
     return theta
 
-def draw_geodesic(a, b, c, ax, c1=None, c2=None, verbose=False, width=.1):
+def draw_geodesic(a, b, c, ax, c1=None, c2=None, verbose=False, width=.05):
    
     cent = get_circle_center(a,b,c)  
     radius = euclid_dist(a, cent)
@@ -101,7 +101,7 @@ def draw_geodesic(a, b, c, ax, c1=None, c2=None, verbose=False, width=.1):
     theta2 = np.where(mask, t2, t1)
     
     collinear_mask = collinear(a, b, c)
-    mask_ = np.logical_or(collinear_mask, np.abs(t1 - t2) < 10)
+    mask_ = np.logical_or(collinear_mask, np.abs(t1 - t2) < 3)
     
     coordsA = "data"
     coordsB = "data"
@@ -122,7 +122,7 @@ def draw_graph(edges, embedding, labels, path, ):
 
     print ("saving two-dimensional poincare plot to {}".format(path))
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=[5,5])
     title = "Two dimensional poincare plot"
     plt.suptitle(title)
     
@@ -130,12 +130,29 @@ def draw_graph(edges, embedding, labels, path, ):
 
     hyperbolic_setup(fig, ax)
 
+    idx = labels >= 0
+    colours = np.random.rand(max(labels)+1, 3)
+
     a = embedding[edges[:,0]]
     b = embedding[edges[:,1]]
     c = get_third_point(a, b)
     
     draw_geodesic(a, b, c, ax)
-    ax.scatter(embedding[:,0], embedding[:,1], c=labels, s=50, zorder=2)
+
+    if len(labels.shape) == 2:
+        core_nodes = labels[:,1].astype(np.bool)
+        ax.scatter(embedding[core_nodes,0], embedding[core_nodes,1], 
+            c=["r" if l==0 else "g" if l==1 else "b" for l in labels[core_nodes,0]],
+            marker="o",
+            s=50, zorder=2)
+        ax.scatter(embedding[~core_nodes,0], embedding[~core_nodes,1], 
+            c=["r" if l==0 else "g" if l==1 else "b" for l in labels[~core_nodes,0]],
+            marker="X",
+            s=50, zorder=2)
+    else:
+        ax.scatter(embedding[idx,0], embedding[idx,1], 
+            c=colours[labels[idx]],
+            s=50, zorder=2)
 
     # plt.savefig(path)
     plt.show()

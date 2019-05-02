@@ -141,16 +141,16 @@ def main():
 		for theta2 in np.arange(0.05, theta1, 0.05):
 
 			filename = "theta1={:.02f}-theta2={:.02f}-seed={:02d}".format(theta1, theta2, seed)
-			edgelist_filename = os.path.join(directory, filename + ".edgelist")
+			edgelist_filename = os.path.join(directory, filename + ".tsv")
 			node_label_filename = os.path.join(directory, filename + ".csv")
 
 			connection_probs = np.array([[theta1, 0,      theta1],
 										 [theta1, theta2, 0],
 										 [0,      0,      theta2]])
 
-			if os.path.exists(edgelist_filename):
-				print ("{} already exists".format(edgelist_filename))
-				continue
+			# if os.path.exists(edgelist_filename):
+			# 	print ("{} already exists".format(edgelist_filename))
+			# 	continue
 
 			node_labels, adj = build_bow_tie(num_nodes, 
 				core_prob, 
@@ -169,8 +169,9 @@ def main():
 			            if graph.degree(v) > graph.degree(u):
 			                graph.remove_edge(u, v)
 			                graph.add_edge(v, u)
+			                
 			nx.set_edge_attributes(graph, values=1, name="weight")
-			nx.write_edgelist(graph, edgelist_filename, delimiter="\t")
+			nx.write_edgelist(graph, edgelist_filename, delimiter="\t", data=["weight"])
 			node_labels =  pd.DataFrame.from_dict(node_labels, orient="index")
 			node_labels.to_csv(node_label_filename, sep=",")
 
@@ -183,16 +184,24 @@ def main():
 			periphery_in = graph.subgraph([n for n in graph.nodes() if node_labels[n] == 1])
 			periphery_out = graph.subgraph([n for n in graph.nodes() if node_labels[n] == 2])
 
-			for n1 in periphery_in.nodes():
-				for n2 in periphery_out.nodes():
-					assert not (n1, n2) in graph.edges() and not (n2, n1) in graph.edges()
-			print("Passed")
-
 			print ("Number of nodes = {}, number of edges = {}".format(len(graph), len(graph.edges())))
 			print ("Network density = {}".format(nx.density(graph)))
 			print ("Core density = {}".format(nx.density(core)))
 			print ("Periphery in density = {}".format(nx.density(periphery_in)))
 			print ("Periphery out density = {}".format(nx.density(periphery_out)))
+
+			for n1 in periphery_in.nodes():
+				for n2 in periphery_out.nodes():
+					assert not (n1, n2) in graph.edges() and not (n2, n1) in graph.edges()
+
+
+			assert nx.is_connected(core.to_undirected())
+			for node in core:
+				assert len(nx.descendants(core, node)) == len(core) - 1, "node {} cannot reach some nodes in core".format(node)
+			
+			print("Passed")
+
+
 
 if __name__ == "__main__":
 	main()
