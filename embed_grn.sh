@@ -1,8 +1,8 @@
 #!/bin/bash
 
-days=3
+days=10
 hrs=00
-mem=5G
+mem=10G
 
 heat=/rds/projects/2018/hesz01/heat/main.py
 
@@ -10,9 +10,9 @@ edgelist=edgelists/grn/edgelist.tsv
 embedding_dir=embeddings/grn/
 walks_dir=walks/grn/
 
-for dim in 05 10 25 50 100
+for dim in 25 50 
 do
-	for seed in {00..29}
+	for seed in {00..4}
 	do
 
 		slurm_options=$(echo \
