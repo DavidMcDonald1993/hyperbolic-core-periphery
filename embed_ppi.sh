@@ -1,6 +1,6 @@
 #!/bin/bash
 
-days=3
+days=10
 hrs=00
 mem=32G
 
@@ -12,7 +12,7 @@ walks_dir=walks/ppi/
 
 for dim in 25 50 100
 do
-	for seed in {00..5}
+	for seed in {00..30}
 	do
 
 		slurm_options=$(echo \

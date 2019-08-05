@@ -1,1 +1,12 @@
 *.pkl
+walks
+test.sh
+predictions
+results
+jupyter_notebooks
+motifs
+*.png
+.vscode
+embeddings
+deconstruct_all.sh
+bow_tie_generation.sh

@@ -12,99 +12,157 @@ import pickle as pkl
 import argparse
 
 import matplotlib.pyplot as plt
-from networkx.drawing.nx_agraph import write_dot, graphviz_layout
+from networkx.drawing.nx_agraph import write_dot, graphviz_layout, to_agraph
 
-def build_bow_tie(num_nodes, core_prob, connection_probs, 
-								 self_loops=False, directed=True, seed=0):
+import itertools
 
-	def change_edge_direction(graph, direction=lambda u, v: v >= u):
-		if nx.is_directed(graph):
-			return graph
-		degrees = dict(nx.degree(graph))
-		return nx.DiGraph([(u, v) if direction(degrees[u], degrees[v]) else (v, u) for u, v in graph.edges()])
+import random
+
+def build_bow_tie(num_nodes, 
+	num_core, 
+	num_tendrils=4, 
+	num_tubes=2, 
+	core_p=.3,
+	inhibitor_p=.5,
+	tendril_length_range=[1,2,3],
+	tube_length_range=[1,2,3],
+	kernel=lambda x : x, 
+	seed=0, ):
 
 	np.random.seed(seed)
+	random.seed(seed)
 
-	assert connection_probs.shape[0] == 3
-	assert connection_probs.shape[1] == 3
+	num_periphery_in = int(np.ceil(num_nodes/2))
+	num_periphery_in_core = int(np.ceil(num_core/2))
+	num_periphery_out = num_nodes - num_periphery_in
+	num_periphery_out_core = num_core - num_periphery_in_core
 
-	periphery_prob = 1 - core_prob
+	periphery_in = nx.gn_graph(num_periphery_in, 
+		kernel=kernel, seed=2*seed)
 
-	num_in = int(np.ceil(num_nodes * periphery_prob / 2.))
-	num_core = int(np.ceil(num_nodes * core_prob))
-	num_out = num_nodes - (num_in + num_core)
+	periphery_in_degrees = dict(periphery_in.degree())
+	periphery_in_nodes_sorted = sorted(periphery_in_degrees, key=periphery_in_degrees.get, reverse=True)
+	periphery_in_core_nodes = periphery_in_nodes_sorted[:num_periphery_in_core]
+	periphery_in_periphery_nodes = periphery_in_nodes_sorted[num_periphery_in_core:]
 
-	node_labels = {n : (1 if n < num_in else 0 if n < num_in + num_core else 2) for n in range(num_nodes) }
+	nx.set_edge_attributes(periphery_in, name="weight", 
+		values={edge: np.random.choice([-1, 1], p=[inhibitor_p, 1-inhibitor_p]) for edge in periphery_in.edges()})
 
-	node_pairs = [(n1, n2) for n1 in range(num_nodes) 
-		for n2 in (np.arange(n1 + 1, num_in + num_core) if n1 < num_in
-		else np.arange(num_in, num_nodes) if n1 < num_in + num_core
-		else np.arange(n1 + 1, num_nodes))]
+	# # relabel core
+	# periphery_in = nx.relabel_nodes(periphery_in, {n: "core_in_{}".format(i) for i, n in enumerate(periphery_in_core_nodes)})
+	# # relabel periphery
+	# periphery_in = nx.relabel_nodes(periphery_in, {n: "periphery_in_{}".format(i) for i, n in enumerate(periphery_in_periphery_nodes)})
 
-	probs = [connection_probs[node_labels[n1], node_labels[n2]] for (n1, n2) in node_pairs]
+	periphery_out = nx.gn_graph(num_periphery_out, 
+		kernel=kernel, seed=2*seed+1).reverse()
+
+	periphery_out_degrees = dict(periphery_out.degree())
+	periphery_out_nodes_sorted = sorted(periphery_out_degrees, key=periphery_out_degrees.get, reverse=True)
+	periphery_out_core_nodes = periphery_out_nodes_sorted[:num_periphery_out_core]
+	periphery_out_periphery_nodes = periphery_out_nodes_sorted[num_periphery_out_core:]
+
+	nx.set_edge_attributes(periphery_out, name="weight", 
+		values={edge: np.random.choice([-1, 1], p=[inhibitor_p, 1-inhibitor_p]) for edge in periphery_out.edges()})
+
+	# relabel core
+	# periphery_out = nx.relabel_nodes(periphery_out, {n: "core_out_{}".format(i) for i, n in enumerate(periphery_out_core_nodes)})
+	# # relabel periphery
+	# periphery_out = nx.relabel_nodes(periphery_out, {n: "periphery_out_{}".format(i) for i, n in enumerate(periphery_out_periphery_nodes)})
+
+	graph = nx.union(periphery_in, periphery_out, rename=("in-", "out-"))
+
+	# add more edges to core
+	core = graph.subgraph(["in-{}".format(i) 
+		for i in periphery_in_core_nodes] + ["out-{}".format(i) for i in periphery_out_core_nodes])
+
+	## self edges in core
+	for u in sorted(core.nodes()):
+		if np.random.rand() < core_p:
+			graph.add_edge(u, u, weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+
+	for u, v in itertools.combinations(sorted(core.nodes()), 2):
+		if np.random.rand() < core_p:
+			graph.add_edge(u, v, weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+		if np.random.rand() < core_p:
+			graph.add_edge(v, u, weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+
+	while not nx.is_strongly_connected(core):
+		edge = np.random.choice(core, size=2, replace=False)
+		graph.add_edge(edge[0], edge[1], weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
 	
+	graph = nx.convert_node_labels_to_integers(graph,)
 
-	adj = np.zeros((num_nodes, num_nodes))
-	adj[tuple(zip(*node_pairs))] = np.random.rand(len(probs)) < probs
+	core = set(max(nx.strongly_connected_component_subgraphs(graph), key=len))
+	periphery_in = set()
+	periphery_out = set()
+	for n in core:
+		for u in nx.ancestors(graph, n) - core:
+			assert u not in periphery_out
+			periphery_in.add(u)
+		for u in nx.descendants(graph, n) - core:
+			assert u not in periphery_in
+			periphery_out.add(u)
 
-	return node_labels, adj
+	periphery_in = list(periphery_in)
+	periphery_out = list(periphery_out)
 
-def build_bow_tie_2(num_nodes, num_edges, kernel=lambda x : x, seed=0, ):
-	
-    def to_directed(graph, direction=lambda u, v: v >= u):
-        if nx.is_directed(graph):
-            return graph
-        degrees = dict(nx.degree(graph))
-        return nx.DiGraph([(u, v) if direction(degrees[u], degrees[v]) else (v, u) for u, v in graph.edges()])
+	# add tendrils
+	tendril_nodes = []
+	for i in range(num_tendrils):
+		tendril_length = np.random.choice(tendril_length_range)  
+		# even -- start from in
+		if i % 2 == 0:
 
-    num_core = int(np.ceil(num_nodes/10.))
-    num_nodes += num_core # account for overlap
-    num_periphery_in = int(np.ceil(num_nodes/2))
-    num_periphery_out = num_nodes - num_periphery_in
+			start = np.random.choice(periphery_in)
+			graph.add_edge(start, len(graph), weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+			tendril_nodes.append(len(graph) - 1)    
+			for j in range(tendril_length):
+				graph.add_edge(len(graph) - 1, len(graph), weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+				tendril_nodes.append(len(graph) - 1)
 
-    # periphery_in = to_directed(nx.barabasi_albert_graph(num_periphery_in, 
-    #     m=num_edges, seed=2*seed))
-    periphery_in = nx.gn_graph(num_periphery_in, kernel=kernel, seed=2*seed)
-    # periphery_in = nx.generators.directed.scale_free_graph(num_periphery_in, 
-    	# alpha=0.46, beta=0.54, gamma=1e-10, seed=2*seed)
+		else: # odd -- end at out component
 
-    periphery_in_degrees = dict(periphery_in.degree())
-    periphery_in_nodes_sorted = sorted(periphery_in_degrees, key=periphery_in_degrees.get, reverse=True)
-    periphery_in_core_nodes = periphery_in_nodes_sorted[:num_core]
-    periphery_in_periphery_nodes = periphery_in_nodes_sorted[num_core:]
+			graph.add_node(len(graph))
+			tendril_nodes.append(len(graph) - 1)
 
-    # relabel core
-    periphery_in = nx.relabel_nodes(periphery_in, {n: "core_{}".format(i) for i, n in enumerate(periphery_in_core_nodes)})
-    # relabel periphery
-    periphery_in = nx.relabel_nodes(periphery_in, {n: "periphery_in_{}".format(i) for i, n in enumerate(periphery_in_periphery_nodes)})
+			for j in range(tendril_length):
+				graph.add_edge(len(graph) -1, len(graph), weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+				tendril_nodes.append(len(graph) - 1)
 
-    # periphery_out = to_directed(nx.barabasi_albert_graph(num_periphery_out, 
-        # m=num_edges, seed=2*seed+1), direction=lambda u, v: v <= u)
-    periphery_out = nx.gn_graph(num_periphery_out, kernel=kernel, seed=2*seed+1).reverse()
-    # periphery_out = nx.generators.directed.scale_free_graph(num_periphery_out, 
-    	# alpha=0.46, beta=0.54, gamma=1e-10, seed=2*seed+1).reverse()
+			end = np.random.choice(periphery_out)
+			graph.add_edge(len(graph) - 1, end, weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
 
-    periphery_out_degrees = dict(periphery_out.degree())
-    periphery_out_nodes_sorted = sorted(periphery_out_degrees, key=periphery_out_degrees.get, reverse=True)
-    periphery_out_core_nodes = periphery_out_nodes_sorted[:num_core]
-    periphery_out_periphery_nodes = periphery_out_nodes_sorted[num_core:]
+	# add tubes
+	tube_nodes = []
+	for i in range(num_tubes):
+		# start from in
+		start = np.random.choice(periphery_in)
+		# end at out component
+		end = np.random.choice(periphery_out)
+		tube_length = np.random.choice(tube_length_range)
 
-    # relabel core
-    periphery_out = nx.relabel_nodes(periphery_out, {n: "core_{}".format(i) for i, n in enumerate(periphery_out_core_nodes)})
-    # relabel periphery
-    periphery_out = nx.relabel_nodes(periphery_out, {n: "periphery_out_{}".format(i) for i, n in enumerate(periphery_out_periphery_nodes)})
+		graph.add_edge(start, len(graph), weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+		tube_nodes.append(len(graph) - 1)
 
-    graph = periphery_in.copy()
-    graph.add_edges_from(periphery_out.edges())
-    nx.set_edge_attributes(graph, values=1., name="weight")
+		for j in range(tube_length):
+			graph.add_edge(len(graph) - 1, len(graph), weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
+			tube_nodes.append(len(graph) - 1)
+		graph.add_edge(len(graph) - 1, end, weight=np.random.choice([-1., 1.], p=[inhibitor_p, 1-inhibitor_p]))
 
-    mapping = {n : i for i, n in enumerate(graph.nodes())}
-    graph = nx.relabel_nodes(graph, mapping)
+	# 0 core
+	# 1 in
+	# 2 out
+	# 3 tendril
+	# 4 tube
 
-    node_labels = {v: (0 if "core" in k else 1 if "in" in k else 2) for k, v in mapping.items()}
-    node_labels = pd.DataFrame.from_dict(node_labels, orient="index")
+	node_labels = np.ones(len(graph), dtype=int) * 3
+	node_labels[list(core)] = 0
+	node_labels[periphery_in] = 1
+	node_labels[periphery_out] = 2
+	node_labels[tendril_nodes] = 3
+	node_labels[tube_nodes] = 4
 
-    return node_labels, graph
+	return node_labels, graph
 
 def parse_args():
 	'''
@@ -112,11 +170,12 @@ def parse_args():
 	'''
 	parser = argparse.ArgumentParser(description="Run core-periphery detections algorithms")
 
-	parser.add_argument("--edgelist_dir", dest="edgelist_directory", type=str, default="edgelists/",
-		help="The directory containing edgelist files (default is 'edgelists/').")
+	parser.add_argument("--edgelist_dir", dest="edgelist_directory", type=str, default="datasets/",
+		help="The directory containing edgelist files (default is 'datasets/').")
 
 	parser.add_argument("--seed", dest="seed", type=int, default=0,
 		help="Random seed (default is 0).")
+
 	args = parser.parse_args()
 	return args
 
@@ -126,82 +185,106 @@ def main():
 
 	edgelist_directory = args.edgelist_directory
 
-	num_nodes = 400
-	num_seeds = 30
+	num_nodes = 30
+	num_core = 4
+	num_seeds = 5
 
-	seed = args.seed
-	core_prob = 1./6
+	root_directory = os.path.join(edgelist_directory, "synthetic_bow_tie")
+	if not os.path.exists(root_directory):
+		print ("Making directory: {}".format(root_directory))
+		os.makedirs(root_directory, exist_ok=True)
 
-	directory = os.path.join(edgelist_directory, "synthetic_bow_tie")
-	if not os.path.exists(directory):
-		print ("Making directory: {}".format(directory))
-		os.makedirs(directory, exist_ok=True)
+	for seed in range(num_seeds):
+		# seed = args.seed
 
-	for theta1 in np.arange(0.10, 1.0, 0.05):
-		for theta2 in np.arange(0.05, theta1, 0.05):
+		directory = os.path.join(root_directory, "seed={:03d}".format(seed))
 
-			filename = "theta1={:.02f}-theta2={:.02f}-seed={:02d}".format(theta1, theta2, seed)
-			edgelist_filename = os.path.join(directory, filename + ".tsv")
-			node_label_filename = os.path.join(directory, filename + ".csv")
+		if not os.path.exists(directory):
+			print ("Making directory: {}".format(directory))
+			os.makedirs(directory, exist_ok=True)
 
-			connection_probs = np.array([[theta1, 0,      theta1],
-										 [theta1, theta2, 0],
-										 [0,      0,      theta2]])
+		edgelist_filename = os.path.join(directory, "edgelist.tsv")
+		condensed_edgelist_filename = os.path.join(directory, "edgelist_condensed.tsv")
 
-			# if os.path.exists(edgelist_filename):
-			# 	print ("{} already exists".format(edgelist_filename))
-			# 	continue
+		node_label_filename = os.path.join(directory, "labels.csv")
+		condensed_map_filename = os.path.join(directory, "condensed_map.csv")
 
-			node_labels, adj = build_bow_tie(num_nodes, 
-				core_prob, 
-				connection_probs,
-				seed=seed)
-			graph = nx.from_numpy_matrix(adj, create_using=nx.DiGraph())
-			graph.remove_edges_from(graph.selfloop_edges())
-			# change direction to point "in" or "out"
-			for u, v in list(graph.edges()):
-			    if node_labels[u] == node_labels[v]:
-			        if node_labels[u] == 1: # in component
-			            if graph.degree(u) > graph.degree(v):
-			                graph.remove_edge(u, v)
-			                graph.add_edge(v, u)
-			        elif node_labels[u] == 2: # out component
-			            if graph.degree(v) > graph.degree(u):
-			                graph.remove_edge(u, v)
-			                graph.add_edge(v, u)
-			                
-			nx.set_edge_attributes(graph, values=1, name="weight")
-			nx.write_edgelist(graph, edgelist_filename, delimiter="\t", data=["weight"])
-			node_labels =  pd.DataFrame.from_dict(node_labels, orient="index")
-			node_labels.to_csv(node_label_filename, sep=",")
+		node_labels, graph = build_bow_tie(num_nodes, num_core, 
+			num_tendrils=4, num_tubes=2,
+			core_p=.3,
+			inhibitor_p=0.5,
+			kernel=lambda x: x**.75, seed=seed)  
 
-			print ("Completed {}".format(filename))
+		assert nx.is_weakly_connected(graph)
 
-			node_labels = node_labels.reindex(graph.nodes()).values.flatten()
-			graph = nx.convert_node_labels_to_integers(graph)
+		nx.set_edge_attributes(graph, name="arrowhead",
+			values={(u, v): ("normal" if w==1. else "tee") 
+				for u, v, w in graph.edges(data="weight")})
 
-			core = graph.subgraph([n for n in graph.nodes() if node_labels[n] == 0])
-			periphery_in = graph.subgraph([n for n in graph.nodes() if node_labels[n] == 1])
-			periphery_out = graph.subgraph([n for n in graph.nodes() if node_labels[n] == 2])
+		colors = ["red", "green", "blue", "yellow", "cyan", "magenta"]
+		nx.set_node_attributes(graph, name="color", 
+			values={n: colors[node_labels[n]] for n in graph.nodes()})
 
-			print ("Number of nodes = {}, number of edges = {}".format(len(graph), len(graph.edges())))
-			print ("Network density = {}".format(nx.density(graph)))
-			print ("Core density = {}".format(nx.density(core)))
-			print ("Periphery in density = {}".format(nx.density(periphery_in)))
-			print ("Periphery out density = {}".format(nx.density(periphery_out)))
+		# core = max(nx.strongly_connected_component_subgraphs(graph, copy=False), key=len)
 
-			for n1 in periphery_in.nodes():
-				for n2 in periphery_out.nodes():
-					assert not (n1, n2) in graph.edges() and not (n2, n1) in graph.edges()
+		# randomly assign edge labels to core
+		# nx.set_edge_attributes(core, name="weight", values={(u, v): np.random.choice([-1., 1.]) for u, v in core.edges()})
+		# nx.write_edgelist(core, os.path.join(directory, "core.tsv"), delimiter="\t", data=["weight"])
 
+		# ensure that every node appears in edgelist at least once with dummy self edges
+		# graph.add_weighted_edges_from((u, u, 0.) for u in sorted(graph.nodes()) if (u, u) not in graph.edges())
 
-			assert nx.is_connected(core.to_undirected())
-			for node in core:
-				assert len(nx.descendants(core, node)) == len(core) - 1, "node {} cannot reach some nodes in core".format(node)
-			
-			print("Passed")
+		nx.write_edgelist(graph, edgelist_filename, delimiter="\t", data=["weight"])
 
+		network_plot_filename = os.path.join(directory, "whole_network.png")
+		graph.graph['edge'] = {'arrowsize': '.8', 'splines': 'curved'}
+		graph.graph['graph'] = {'scale': '3'}
+		
+		a = to_agraph(graph)
+		a.layout('dot')   
+		a.draw(network_plot_filename)
+		
 
+		# node_labels = pd.DataFrame(node_labels)
+		pd.DataFrame(node_labels).to_csv(node_label_filename, sep=",")
+
+		graph_condensed = nx.condensation(graph)
+		nx.set_edge_attributes(graph_condensed, name="weight", values=1.)
+		nx.write_edgelist(graph_condensed, condensed_edgelist_filename, delimiter="\t", data=["weight"])
+
+		members = nx.get_node_attributes(graph_condensed, "members")
+		core_node = max(members, key= lambda x: len(set(members[x])))
+
+		in_component = list(nx.ancestors(graph_condensed, core_node))
+		out_component = list(nx.descendants(graph_condensed, core_node))
+
+		condensed_node_map = {n_: n for n, l in nx.get_node_attributes(graph_condensed, name="members").items() for n_ in l}
+	   
+		assert len(condensed_node_map) == len(graph)
+		pd.DataFrame.from_dict(condensed_node_map, orient="index").to_csv(condensed_map_filename) 
+
+		inverse_map = {v: k for k, v in condensed_node_map.items()}
+		graph_condensed_labels = np.array([node_labels[inverse_map[n]] for n in sorted(graph_condensed.nodes())])
+		
+		for u in in_component:
+			assert graph_condensed_labels[u] == 1
+		for u in out_component:
+			assert graph_condensed_labels[u] == 2
+
+		pd.DataFrame(graph_condensed_labels).to_csv(os.path.join(directory, "labels_condensed.csv"), sep=",")
+
+		nx.set_node_attributes(graph_condensed, name="color", 
+			values={n: colors[graph_condensed_labels[n]] for n in graph_condensed.nodes()})
+		
+		network_plot_filename = os.path.join(directory, "condensed_network.png")
+		graph_condensed.graph['edge'] = {'arrowsize': '.8', 'splines': 'curved'}
+		graph_condensed.graph['graph'] = {'scale': '3'}
+		
+		a = to_agraph(graph_condensed)
+		a.layout('dot')   
+		a.draw(network_plot_filename)
+		
+		print ("Completed seed={}".format(seed))
 
 if __name__ == "__main__":
 	main()

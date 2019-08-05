@@ -15,5 +15,5 @@ module purge; module load bluebear
 module load apps/python3/3.5.2
 
 echo "starting "${ARR[${SLURM_ARRAY_TASK_ID}]}
-python src/synthetic_bow_tie_generation.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
+python cluster/synthetic_bow_tie_generation.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
 echo "completed "${ARR[${SLURM_ARRAY_TASK_ID}]}

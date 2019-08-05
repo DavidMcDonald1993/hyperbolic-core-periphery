@@ -1,0 +1,75 @@
+FANMOD 1.1 subgraph enumeration
+-------------------------------
+
+Network name: /home/david/Documents/hyperbolic-core-periphery/edgelists/ecoli/ecoli_preprocessed.tsv
+Network type: Directed
+Number of nodes: 1565
+Number of edges: 3632
+Number of single edges: 3616
+Number of mutual edges: 16
+
+Algorithm: enumeration
+Subgraph size: 3
+
+Generated 1000 random networks
+   with locally constant number of bidirectional edges,
+   3 exchanges per edge and 3 tries per edge.
+
+268399 subgraphs were enumerated in the original network.
+270140080 subgraphs were enumerated in the random networks.
+270408479 subgraphs were enumerated in all networks.
+
+For the random networks: 14278614 tries were made, 10624749 were successful.
+Randomization took 3.98333 seconds.
+Enumeration took 109.278 seconds.
+
+
+Result overview:
+
+  ID Adj   Frequency     Mean-Freq  Standard-Dev    Z-Score  p-Value
+          [Original]      [Random]      [Random]
+
+   6 000     96.376%       95.931%    0.00027068     16.413        0
+     000
+     110
+
+  12 000     1.4057%       1.5688%    0.00020115    -8.1041        1
+     001
+     100
+
+  36 000     1.3029%       1.6125%    0.00022211    -13.937        1
+     100
+     100
+
+  14 000    0.38078%      0.66845%    0.00020368    -14.124        1
+     001
+     110
+
+  38 000    0.35619%      0.18085%    0.00020886      8.395        0
+     100
+     110
+
+  46 000     0.1617%     0.015743%    0.00010269     14.214        0
+     101
+     110
+
+ 164 010   0.011177%      0.01905%    9.9478e-06    -7.9143        1
+     100
+     100
+
+ 166 010   0.004471%   0.00061859%    4.6065e-06     8.3629        0
+     100
+     110
+
+ 174 010 0.00074516%   8.8848e-05%    1.6989e-06      3.863        0
+     101
+     110
+
+ 238 011 0.00037258%            0%             0  undefined        0
+     101
+     110
+
+  78 001 0.00037258%    0.0021322%    1.6983e-06    -10.361        1
+     001
+     110
+

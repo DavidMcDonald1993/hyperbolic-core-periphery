@@ -158,11 +158,21 @@ def draw_graph(edges, embedding, labels, path, ):
     plt.show()
     plt.close()
 
-def plot_degree_dist(title, graph, ax):
-    degrees = sorted(graph.degree().values())
+def plot_degree_dist(graph, title):
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+
+    degrees = sorted(dict(graph.degree()).values())
+    degrees = np.floor(degrees)
+
     deg, counts = zip(*collections.Counter(degrees).items())
     deg = np.array(deg)
     counts = np.array(counts)
+
+    idx = deg > 0
+    deg = deg[idx]
+    counts = counts[idx]
 
     m, c = np.polyfit(np.log(deg), np.log(counts), 1)
     y_fit = np.exp(m*np.log(deg) + c)
@@ -171,3 +181,4 @@ def plot_degree_dist(title, graph, ax):
     ax.plot(deg, y_fit, ':', c="r")
     ax.set(title=title, xscale="log", yscale="log", xlabel="Connections", ylabel="Frequency",)
     ax.set_ylim(bottom=.9)
+    plt.show()

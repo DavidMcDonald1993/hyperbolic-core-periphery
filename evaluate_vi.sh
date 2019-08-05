@@ -18,5 +18,5 @@ module load apps/python3/3.5.2
 module load apps/scikit-learn/0.19.0-python-3.5.2
 
 echo "starting "${ARR[${SLURM_ARRAY_TASK_ID}]}
-python src/evaluate_vi.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
+python cluster/evaluate_vi.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
 echo "completed "${ARR[${SLURM_ARRAY_TASK_ID}]}

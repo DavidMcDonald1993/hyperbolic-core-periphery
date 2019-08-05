@@ -19,5 +19,5 @@ module load Python/3.6.3-iomkl-2018a
 pip install --user cpalgorithm
 
 echo "starting "${ARR[${SLURM_ARRAY_TASK_ID}]}
-python src/run_competition.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
+python cluster/run_competition.py ${ARR[${SLURM_ARRAY_TASK_ID}]}
 echo "completed "${ARR[${SLURM_ARRAY_TASK_ID}]}

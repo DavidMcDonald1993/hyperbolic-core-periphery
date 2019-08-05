@@ -51,7 +51,7 @@ def main():
 	num_nodes = 400
 	num_seeds = 30
 
-	seed = args.seed
+	# seed = args.seed
 	exp = args.exp
 	# theta1 = args.theta1
 	# theta2 = args.theta2
@@ -63,18 +63,9 @@ def main():
 	assert exp in exps
 	assert algorithm in algorithms
 	assert seed < num_seeds
-	# assert theta2 < theta1
-	# if theta2 >= theta1:
-	# 	return
-
-	# for exp in exps:
 
 	for theta1 in np.arange(0.10, 1.0, 0.05):
 		for theta2 in np.arange(0.05, theta1, 0.05):
-
-	# 			for algorithm in algorithms:
-
-	# 				for seed in range(num_seeds):
 
 			edgelist_filename = os.path.join(edgelist_dir, "synthetic_core_periphery", exp,
 				"theta1={:.02f}-theta2={:.02f}-seed={:02d}.edgelist".format(theta1, theta2, seed) )
@@ -93,9 +84,6 @@ def main():
 				continue
 
 			g = nx.read_weighted_edgelist(edgelist_filename, delimiter="\t", nodetype=str)
-
-			# with open("edgelists/synthetic/one_core/theta1=0.10-theta2=0.05-seed=00.pkl", "rb") as f:
-			# 	node_labels = pkl.load(f)
 
 			if algorithm == "BE":
 				_algorithm = cp.BE()
@@ -116,7 +104,7 @@ def main():
 				pkl.dump(predicted_labels, f, pkl.HIGHEST_PROTOCOL)
 
 			print ("Completed {}".format(label_filename))
-	# sig_c, sig_x, significant, p_values = cp.qstest(c, x, g, algorithm)
+			sig_c, sig_x, significant, p_values = cp.qstest(c, x, g, algorithm)
 
 if __name__ == "__main__":
 	main()
